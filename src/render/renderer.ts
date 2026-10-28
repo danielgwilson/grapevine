@@ -4,13 +4,14 @@ import type { GraphNode } from "../engine/replay";
 
 export type View = { k: number; x: number; y: number; width: number; height: number; dpr: number };
 
-const BG = "#0d0e11";
-const INK = "#edeef0"; // slate 12 (dark)
-const MUTED = "#b0b4ba"; // slate 11 (dark)
-const MONO = '"JetBrains Mono Variable", ui-monospace, monospace';
-const DISPLAY = '"Space Grotesk Variable", system-ui, sans-serif';
+const VOID = "#05070b";
+const INK = "#eef3ff";
+const INK_2 = "#aab4c8";
+const MONO = '"Martian Mono Variable", ui-monospace, monospace';
+const SANS = '"Geist Variable", system-ui, sans-serif';
 
 const PULSE_MS = 900;
+const AVATAR_PX = 128;
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
@@ -22,13 +23,105 @@ const initialsOf = (name: string) =>
     .map((s) => s[0]?.toUpperCase() ?? "")
     .join("");
 
+/** A soft radial glow, pre-rendered once per color and drawn with additive blending. */
+const glowCache = new Map<string, HTMLCanvasElement>();
+const glowSprite = (color: string) => {
+  let sprite = glowCache.get(color);
+  if (sprite) return sprite;
+  sprite = document.createElement("canvas");
+  sprite.width = sprite.height = 64;
+  const g = sprite.getContext("2d");
+  if (g) {
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, withAlpha(color, 0.9));
+    grad.addColorStop(0.25, withAlpha(color, 0.35));
+    grad.addColorStop(1, withAlpha(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+  }
+  glowCache.set(color, sprite);
+  return sprite;
+};
+
+/** The background field, rendered once per size with noise dithering so the gradient does not band. */
+const fieldCache: { key: string; canvas?: HTMLCanvasElement } = { key: "" };
+const fieldCanvas = (w: number, h: number) => {
+  const key = `${w}x${h}`;
+  if (fieldCache.key === key && fieldCache.canvas) return fieldCache.canvas;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d");
+  if (g) {
+    const grad = g.createRadialGradient(
+      w * 0.5,
+      h * 0.55,
+      0,
+      w * 0.5,
+      h * 0.55,
+      Math.max(w, h) * 0.7,
+    );
+    grad.addColorStop(0, "#0d1322");
+    grad.addColorStop(1, VOID);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+    const img = g.getImageData(0, 0, w, h);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random() - 0.5) * 3;
+      d[i] += n;
+      d[i + 1] += n;
+      d[i + 2] += n;
+    }
+    g.putImageData(img, 0, 0);
+  }
+  fieldCache.key = key;
+  fieldCache.canvas = c;
+  return c;
+};
+
 export class Renderer {
   private refChannel = 1;
   private refPerson = 1;
   private initials = new Map<string, string>();
+  /** Circular, pre-cropped avatars keyed by person id. */
+  private avatars = new Map<string, HTMLCanvasElement>();
 
   constructor(private player: Player) {
-    for (const p of player.dataset.people) this.initials.set(p.id, initialsOf(p.fullName));
+    for (const p of player.dataset.people) {
+      this.initials.set(p.id, initialsOf(p.fullName));
+      if (p.avatar) this.loadAvatar(p.id, p.avatar);
+    }
+  }
+
+  private loadAvatar(id: string, url: string) {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = AVATAR_PX;
+      const g = c.getContext("2d");
+      if (!g) return;
+      g.beginPath();
+      g.arc(AVATAR_PX / 2, AVATAR_PX / 2, AVATAR_PX / 2, 0, Math.PI * 2);
+      g.clip();
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      g.drawImage(
+        img,
+        (img.naturalWidth - s) / 2,
+        (img.naturalHeight - s) / 2,
+        s,
+        s,
+        0,
+        0,
+        AVATAR_PX,
+        AVATAR_PX,
+      );
+      this.avatars.set(id, c);
+    };
+    // A missing photo just falls back to a lit point.
+    img.onerror = () => undefined;
+    img.src = url;
   }
 
   /** Bounds-fitting transform for the visible graph. */
@@ -47,7 +140,7 @@ export class Renderer {
       y1 = Math.max(y1, (n.y ?? 0) + r);
     }
     // Keep clear of the HUD (top left) and the legend (bottom).
-    const top = view.height > 420 ? 128 : 96;
+    const top = view.height > 420 ? 132 : 96;
     const bottom = 44;
     const side = 40;
     const availW = view.width - side * 2;
@@ -83,23 +176,15 @@ export class Renderer {
     const { replay, layout } = player;
     const { k } = view;
 
-    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    // Field.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = BG;
-    ctx.fillRect(0, 0, view.width, view.height);
-    const glow = ctx.createRadialGradient(
-      view.width * 0.45,
-      view.height * 0.4,
+    ctx.globalAlpha = 1;
+    ctx.drawImage(
+      fieldCanvas(Math.round(view.width * view.dpr), Math.round(view.height * view.dpr)),
       0,
-      view.width * 0.45,
-      view.height * 0.4,
-      Math.max(view.width, view.height) * 0.75,
+      0,
     );
-    glow.addColorStop(0, "rgba(59, 158, 255, 0.07)");
-    glow.addColorStop(1, "rgba(59, 158, 255, 0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, view.width, view.height);
-    this.drawGrid(ctx, view);
 
     ctx.setTransform(view.dpr * k, 0, 0, view.dpr * k, view.dpr * view.x, view.dpr * view.y);
 
@@ -118,7 +203,12 @@ export class Renderer {
       const norm = clamp01(
         replay.activity(n) / (n.kind === "channel" ? this.refChannel : this.refPerson),
       );
-      const target = n.kind === "channel" ? 8 + 28 * Math.sqrt(norm) : 3 + 9 * Math.sqrt(norm);
+      const target =
+        n.kind === "channel"
+          ? 10 + 26 * Math.sqrt(norm)
+          : this.avatars.has(n.id)
+            ? 6 + 9 * Math.sqrt(norm)
+            : 2.5 + 6 * Math.sqrt(norm);
       n.r = n.r === undefined ? target : n.r + (target - n.r) * 0.14;
     }
 
@@ -133,16 +223,20 @@ export class Renderer {
       }
     }
 
-    // Edges.
+    const channels = layout.visible.filter((n) => n.kind === "channel");
+    const people = layout.visible.filter((n) => n.kind === "person");
+
+    // Edges and glows add light, so overlaps brighten instead of muddying.
+    ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
     for (const link of layout.links) {
       const { source: s, target: t, edge, norm } = link;
       const touched = near ? edge.source.key === focusKey || edge.target.key === focusKey : true;
-      let alpha = edge.kind === "post" ? 0.05 + 0.4 * norm : 0.04 + 0.3 * norm;
-      if (near) alpha = touched ? Math.max(alpha, 0.35) + 0.25 : alpha * 0.15;
-      if (alpha < 0.012) continue;
+      let alpha = edge.kind === "post" ? 0.035 + 0.28 * norm : 0.03 + 0.22 * norm;
+      if (near) alpha = touched ? Math.max(alpha, 0.3) + 0.2 : alpha * 0.12;
+      if (alpha < 0.01) continue;
       ctx.strokeStyle = withAlpha(edge.kind === "post" ? s.color : MENTION, alpha);
-      ctx.lineWidth = (edge.kind === "post" ? 0.6 + 2.2 * norm : 0.5 + 1.4 * norm) / Math.sqrt(k);
+      ctx.lineWidth = (edge.kind === "post" ? 0.5 + 1.6 * norm : 0.5 + 1.1 * norm) / Math.sqrt(k);
       ctx.beginPath();
       ctx.moveTo(s.x ?? 0, s.y ?? 0);
       if (edge.kind === "mention") {
@@ -155,101 +249,114 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // Channels underneath people.
-    const channels = layout.visible.filter((n) => n.kind === "channel");
-    const people = layout.visible.filter((n) => n.kind === "person");
-    const loudChannels = new Set(
-      [...channels]
-        .sort((a, b) => replay.activity(b) - replay.activity(a))
-        .slice(0, 9)
-        .map((n) => n.key),
-    );
-
+    // Channel halos, then hairline rings.
     for (const n of channels) {
       const dim = near && !near.has(n.key);
-      const r = n.r ?? 8;
+      const r = n.r ?? 10;
       const fresh = clamp01(replay.activity(n) / this.refChannel);
-      ctx.globalAlpha = dim ? 0.18 : 1;
-      ctx.fillStyle = withAlpha(n.color, 0.06 + 0.14 * fresh);
+      const flash = clamp01(1 - (now - n.pulseAt) / 600);
+      ctx.globalAlpha = (dim ? 0.08 : 0.18 + 0.35 * fresh) + flash * 0.15;
+      ctx.drawImage(
+        glowSprite(n.color),
+        (n.x ?? 0) - r * 1.25,
+        (n.y ?? 0) - r * 1.25,
+        r * 2.5,
+        r * 2.5,
+      );
+    }
+    ctx.globalCompositeOperation = "source-over";
+    for (const n of channels) {
+      const dim = near && !near.has(n.key);
+      const r = n.r ?? 10;
+      const fresh = clamp01(replay.activity(n) / this.refChannel);
+      ctx.globalAlpha = dim ? 0.2 : 1;
+      ctx.strokeStyle = withAlpha(n.color, 0.3 + 0.6 * fresh);
+      ctx.lineWidth = (n.key === focusKey ? 1.8 : 1) / k;
       ctx.beginPath();
       ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = withAlpha(n.color, 0.35 + 0.6 * fresh);
-      ctx.lineWidth = (n.key === focusKey ? 2.4 : 1.4) / k;
       ctx.stroke();
+      // A small bright core marks the channel's center of gravity.
+      ctx.fillStyle = withAlpha(n.color, 0.5 + 0.5 * fresh);
+      ctx.beginPath();
+      ctx.arc(n.x ?? 0, n.y ?? 0, 1.6 / Math.sqrt(k), 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    // Pulses and flights glow additively.
+    // Ripples, person glows and flights.
     ctx.globalCompositeOperation = "lighter";
     for (const n of layout.visible) {
       const age = now - n.pulseAt;
       if (age < 0 || age > PULSE_MS || (near && !near.has(n.key))) continue;
       const p = age / PULSE_MS;
-      ctx.beginPath();
       if (n.kind === "channel") {
-        // Channels ripple outward.
-        ctx.globalAlpha = (1 - p) * 0.55;
+        ctx.globalAlpha = (1 - p) * 0.5;
         ctx.strokeStyle = n.color;
-        ctx.lineWidth = 1.4 / k;
-        ctx.arc(n.x ?? 0, n.y ?? 0, (n.r ?? 8) + 4 + p * 22, 0, Math.PI * 2);
+        ctx.lineWidth = 1 / k;
+        ctx.beginPath();
+        ctx.arc(n.x ?? 0, n.y ?? 0, (n.r ?? 10) + 3 + p * 20, 0, Math.PI * 2);
         ctx.stroke();
       } else {
-        // People glow, so they never read as rings (rings mean channels).
-        ctx.globalAlpha = (1 - p) * 0.28;
-        ctx.fillStyle = n.color;
-        ctx.arc(n.x ?? 0, n.y ?? 0, (n.r ?? 3) * (1.6 + p * 0.9) + 2 / k, 0, Math.PI * 2);
-        ctx.fill();
+        const r = (n.r ?? 4) * (2.4 + p * 1.2);
+        ctx.globalAlpha = (1 - p) * 0.55;
+        ctx.drawImage(glowSprite(n.color), (n.x ?? 0) - r, (n.y ?? 0) - r, r * 2, r * 2);
       }
     }
-    ctx.globalAlpha = 1;
     for (const f of player.flights) this.drawFlight(ctx, f, now, k, near);
-    ctx.globalCompositeOperation = "source-over";
 
+    // People: photos where we have them, lit points where we do not.
     for (const n of people) {
       const dim = near && !near.has(n.key);
-      const r = n.r ?? 3;
+      const r = n.r ?? 4;
       const fresh = clamp01(replay.activity(n) / this.refPerson);
-      const flash = clamp01(1 - (now - n.pulseAt) / 500);
-      ctx.globalAlpha = dim ? 0.14 : 0.42 + 0.58 * Math.max(fresh, 0.15);
-      ctx.fillStyle = n.color;
-      ctx.beginPath();
-      ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, Math.PI * 2);
-      ctx.fill();
-      if (flash > 0 && !dim) {
-        ctx.globalAlpha = flash * 0.85;
-        ctx.fillStyle = "#ffffff";
+      const x = n.x ?? 0;
+      const y = n.y ?? 0;
+      const avatar = this.avatars.get(n.id);
+      if (avatar) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = dim ? 0.16 : 0.5 + 0.5 * Math.max(fresh, 0.1);
+        ctx.drawImage(avatar, x - r, y - r, r * 2, r * 2);
+        ctx.globalAlpha = dim ? 0.2 : 0.45 + 0.55 * fresh;
+        ctx.strokeStyle = n.key === focusKey ? INK : n.color;
+        ctx.lineWidth = (n.key === focusKey ? 1.8 : 1.1) / k;
         ctx.beginPath();
-        ctx.arc(n.x ?? 0, n.y ?? 0, r * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (n.key === focusKey) {
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = INK;
-        ctx.lineWidth = 1.6 / k;
-        ctx.beginPath();
-        ctx.arc(n.x ?? 0, n.y ?? 0, r + 3 / k, 0, Math.PI * 2);
+        ctx.arc(x, y, r + 0.6 / k, 0, Math.PI * 2);
         ctx.stroke();
-      }
-      if (r * k >= 9 && !dim) {
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = BG;
-        ctx.font = `600 ${Math.round(r * 0.82 * k)}px ${DISPLAY}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.save();
-        ctx.translate(n.x ?? 0, n.y ?? 0);
-        ctx.scale(1 / k, 1 / k);
-        ctx.fillText(this.initials.get(n.id) ?? "", 0, 1);
-        ctx.restore();
+      } else {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = dim ? 0.12 : 0.35 + 0.65 * Math.max(fresh, 0.15);
+        ctx.drawImage(glowSprite(n.color), x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = dim ? withAlpha(n.color, 0.3) : INK;
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(1.2 / k, r * 0.45), 0, Math.PI * 2);
+        ctx.fill();
+        if (r * k >= 11 && !dim) {
+          ctx.fillStyle = VOID;
+          ctx.font = `600 ${Math.round(r * 0.7 * k)}px ${SANS}`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.scale(1 / k, 1 / k);
+          ctx.fillText(this.initials.get(n.id) ?? "", 0, 1);
+          ctx.restore();
+        }
       }
     }
+    ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
 
     // Labels in screen space so they stay crisp at any zoom.
     ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.font = `500 11px ${MONO}`;
+    ctx.font = `500 10px ${MONO}`;
+    const loudChannels = new Set(
+      [...channels]
+        .sort((a, b) => replay.activity(b) - replay.activity(a))
+        .slice(0, 9)
+        .map((n) => n.key),
+    );
     // Greedy placement by priority: focus first, then the loudest nodes.
     // Each label tries below its node, then above; it is skipped if both collide.
     const candidates = layout.visible
@@ -268,32 +375,22 @@ export class Renderer {
     const free = (x0: number, y0: number, x1: number, y1: number) =>
       placed.every(([a0, b0, a1, b1]) => x1 < a0 || x0 > a1 || y1 < b0 || y0 > b1);
     for (const n of candidates) {
-      const w = ctx.measureText(n.label).width + 8;
+      const w = ctx.measureText(n.label).width + 10;
       const h = 16;
       const sx = (n.x ?? 0) * k + view.x;
       const r = (n.r ?? 4) * k;
       const sy = (n.y ?? 0) * k + view.y;
-      const slots = [sy + r + 5, sy - r - 5 - h];
+      const slots = [sy + r + 6, sy - r - 6 - h];
       const slot = slots.find((y) => free(sx - w / 2, y, sx + w / 2, y + h));
       const y = slot ?? (n.key === focusKey ? slots[0] : undefined);
       if (y === undefined) continue;
       placed.push([sx - w / 2, y, sx + w / 2, y + h]);
-      ctx.fillStyle = "rgba(13, 14, 17, 0.78)";
-      ctx.fillRect(sx - w / 2, y, w, h);
-      ctx.fillStyle = n.key === focusKey ? INK : n.kind === "channel" ? MUTED : n.color;
-      ctx.fillText(n.label, sx, y + 2);
-    }
-  }
-
-  private drawGrid(ctx: CanvasRenderingContext2D, view: View) {
-    let step = 48;
-    while (step * view.k < 22) step *= 2;
-    const s = step * view.k;
-    const ox = ((view.x % s) + s) % s;
-    const oy = ((view.y % s) + s) % s;
-    ctx.fillStyle = "rgba(237, 238, 240, 0.055)";
-    for (let x = ox; x < view.width; x += s) {
-      for (let y = oy; y < view.height; y += s) ctx.fillRect(x - 0.6, y - 0.6, 1.2, 1.2);
+      ctx.fillStyle = "rgba(5, 7, 11, 0.72)";
+      ctx.beginPath();
+      ctx.roundRect(sx - w / 2, y, w, h, 3);
+      ctx.fill();
+      ctx.fillStyle = n.key === focusKey ? INK : n.kind === "channel" ? INK_2 : n.color;
+      ctx.fillText(n.label, sx, y + 3);
     }
   }
 
@@ -320,33 +417,31 @@ export class Renderer {
       return [a * x0 + b * cx + c * x2, a * y0 + b * cy + c * y2] as const;
     };
     const head = easeInOut(raw);
-    const tail = Math.max(0, head - 0.22);
+    const tail = Math.max(0, head - 0.24);
     const fade = raw > 0.85 ? (1 - raw) / 0.15 : 1;
-    const steps = 7;
+    const steps = 8;
     ctx.lineCap = "round";
+    ctx.strokeStyle = f.color;
     for (let i = 0; i < steps; i += 1) {
       const u0 = tail + ((head - tail) * i) / steps;
       const u1 = tail + ((head - tail) * (i + 1)) / steps;
       const [ax, ay] = at(u0);
       const [bx, by] = at(u1);
-      ctx.globalAlpha = ((i + 1) / steps) * 0.55 * fade;
-      ctx.strokeStyle = f.color;
-      ctx.lineWidth = ((f.kind === "mention" ? 1.2 : 1.6) * (0.4 + (0.6 * (i + 1)) / steps)) / k;
+      ctx.globalAlpha = ((i + 1) / steps) ** 2 * 0.7 * fade;
+      ctx.lineWidth = ((f.kind === "mention" ? 1 : 1.4) * (0.3 + (0.7 * (i + 1)) / steps)) / k;
       ctx.beginPath();
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
       ctx.stroke();
     }
     const [hx, hy] = at(head);
-    ctx.globalAlpha = 0.95 * fade;
-    ctx.fillStyle = f.kind === "mention" ? MENTION : "#ffffff";
+    const g = 7 / k;
+    ctx.globalAlpha = 0.8 * fade;
+    ctx.drawImage(glowSprite(f.color), hx - g, hy - g, g * 2, g * 2);
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(hx, hy, (f.kind === "mention" ? 1.8 : 2.1) / k, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.35 * fade;
-    ctx.fillStyle = f.color;
-    ctx.beginPath();
-    ctx.arc(hx, hy, 5 / k, 0, Math.PI * 2);
+    ctx.arc(hx, hy, (f.kind === "mention" ? 1.1 : 1.4) / k, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }

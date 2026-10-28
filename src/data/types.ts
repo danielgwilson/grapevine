@@ -5,6 +5,8 @@ export type Person = {
   /** Longer label for the focus panel. */
   fullName: string;
   title?: string;
+  /** Profile photo URL (relative for the demo, Slack's image CDN for imports). */
+  avatar?: string;
 };
 
 export type ChannelKind = "public" | "private" | "group-dm" | "dm";

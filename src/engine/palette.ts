@@ -1,24 +1,22 @@
-// Channel hues, from Radix Colors dark scales (step 10 unless noted), ordered
-// so the busiest channels get the most separable colors.
+// Light, low-saturation hues that read as light on a near-black field rather
+// than as flat fills. Ordered so the busiest channels get the most separable.
 const CHANNEL_HUES = [
-  "#3b9eff", // blue 10
-  "#3dd68c", // green 11-ish (jade/grass family)
-  "#ffc53d", // amber 9
-  "#ff977d", // tomato 11
-  "#4ccce6", // cyan 11
-  "#9eb1ff", // indigo 11
-  "#ff8dcc", // pink 11
-  "#ffa057", // orange 11
-  "#bde56c", // lime 11
-  "#7ce2fe", // sky 9
-  "#e5484d", // red 9
-  "#d19dff", // purple 11
-  "#0bd8b6", // teal-mint 11
-  "#ffe629", // yellow 9
+  "#70d8fa", // sky
+  "#8ea8ff", // periwinkle
+  "#9be3c6", // mint
+  "#f6a6b8", // rose
+  "#c3b5ff", // lilac
+  "#7fc8e8", // glacier
+  "#e7c9a4", // wheat
+  "#a6d7ff", // ice
+  "#b3e09a", // sage
+  "#f2b48c", // apricot
+  "#9fb4d6", // slate blue
+  "#d9a6e8", // orchid
 ];
 
-export const NEUTRAL = "#8b8d98"; // slate 9 (dark)
-export const MENTION = "#ffc53d"; // amber 9
+export const NEUTRAL = "#8b93a7";
+export const MENTION = "#fad586"; // sand
 
 export const colorForChannel = (rank: number) => CHANNEL_HUES[rank % CHANNEL_HUES.length];
 

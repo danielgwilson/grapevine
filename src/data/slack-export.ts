@@ -13,7 +13,13 @@ type RawUser = {
   name?: string;
   deleted?: boolean;
   is_bot?: boolean;
-  profile?: { real_name?: string; display_name?: string; title?: string };
+  profile?: {
+    real_name?: string;
+    display_name?: string;
+    title?: string;
+    image_72?: string;
+    image_192?: string;
+  };
 };
 
 type RawChannel = { id: string; name?: string; members?: string[] };
@@ -26,7 +32,7 @@ type RawMessage = {
   text?: string;
   ts?: string;
   /** Present on messages from people missing from users.json (e.g. Slack Connect guests). */
-  user_profile?: { real_name?: string; display_name?: string; name?: string };
+  user_profile?: { real_name?: string; display_name?: string; name?: string; image_72?: string };
 };
 
 // Subtypes that are system noise rather than someone talking.
@@ -112,6 +118,7 @@ const personFrom = (u: RawUser): Person => {
     name: display || real?.split(" ")[0] || handle,
     fullName: real || display || handle,
     title: u.profile?.title?.trim() || undefined,
+    avatar: u.profile?.image_192 || u.profile?.image_72 || undefined,
   };
 };
 

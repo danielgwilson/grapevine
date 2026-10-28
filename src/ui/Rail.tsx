@@ -2,6 +2,21 @@ import type { Message } from "../data/types";
 import type { Player, Snapshot } from "../engine/player";
 import { fmtCount, fmtShort, fmtTime } from "./format";
 
+function Avatar({ player, id, size }: { player: Player; id: string; size: number }) {
+  const person = player.replay.people.get(id);
+  const node = player.replay.node("person", id);
+  if (person?.avatar) {
+    return (
+      <img className="av" src={person.avatar} alt="" width={size} height={size} loading="lazy" />
+    );
+  }
+  return (
+    <span className="av av-dot" style={{ width: size, height: size }}>
+      <i style={{ background: node?.color }} />
+    </span>
+  );
+}
+
 function MessageRow({
   player,
   m,
@@ -16,7 +31,7 @@ function MessageRow({
   return (
     <li className="msg">
       <div className="msg-meta">
-        <span className="dot" style={{ background: person?.color }} />
+        <Avatar player={player} id={m.user} size={22} />
         <button type="button" className="link" onClick={() => person && player.pin(person.key)}>
           {person?.label ?? "someone"}
         </button>
@@ -77,14 +92,11 @@ export function Rail({ player, snap }: { player: Player; snap: Snapshot }) {
         {focus ? (
           <>
             <div className="focus-head">
-              <span
-                className={focus.kind === "channel" ? "swatch ring" : "swatch"}
-                style={
-                  focus.kind === "channel"
-                    ? { borderColor: focus.color }
-                    : { background: focus.color }
-                }
-              />
+              {focus.kind === "person" ? (
+                <Avatar player={player} id={focus.key.slice(2)} size={40} />
+              ) : (
+                <span className="swatch ring" style={{ borderColor: focus.color }} />
+              )}
               <div>
                 <h3>{focus.label}</h3>
                 {focus.subtitle ? <p className="sub">{focus.subtitle}</p> : null}
@@ -139,7 +151,7 @@ export function Rail({ player, snap }: { player: Player; snap: Snapshot }) {
             ) : null}
           </>
         ) : (
-          <p className="hint">Hover a dot or ring to see who it is. Click to pin it.</p>
+          <p className="hint">Hover a face or a ring to see who it is. Click to pin it.</p>
         )}
       </section>
 

@@ -136,8 +136,7 @@ export function App() {
         <GraphCanvas player={player} />
         <header className="hud">
           <p className="brand">
-            <span className="mark" aria-hidden="true" />
-            murmuration
+            <b>grapevine</b>
             <span className="source">
               {dataset.source === "demo"
                 ? "demo · fictional company"
@@ -148,6 +147,11 @@ export function App() {
             <span className="clock-day">{fmtDay(snap.t)}</span>
             <span className="clock-time">{fmtTime(snap.t)}</span>
           </h1>
+          <p className="tagline">
+            {dataset.source === "demo"
+              ? "A month inside a small kite company, replayed."
+              : "Your workspace, replayed."}
+          </p>
           <p className="dataset">
             {dataset.label} · {fmtCount(dataset.people.length)} people ·{" "}
             {fmtCount(dataset.channels.length)} channels · {fmtCount(dataset.messages.length)}{" "}

@@ -375,7 +375,13 @@ export const buildDemoExport = ({ seed = 7, start, days = 31 }: DemoOptions = {}
         name: u.name.toLowerCase().replace(/[^a-z]+/g, "."),
         deleted: false,
         is_bot: false,
-        profile: { real_name: u.name, display_name: u.name.split(" ")[0], title: TITLES[u.team] },
+        profile: {
+          real_name: u.name,
+          display_name: u.name.split(" ")[0],
+          title: TITLES[u.team],
+          // AI-generated portraits of these fictional people (see README).
+          image_192: `avatars/${u.name.toLowerCase().replace(/\s+/g, "-")}.webp`,
+        },
       })),
     ),
   );

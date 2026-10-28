@@ -65,11 +65,13 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
     const days = span / DAY;
     const dayW = width / days;
     if (days <= 120) {
-      const every = dayW >= 38 ? 1 : dayW >= 12 ? 7 : 14;
+      const every = dayW >= 60 ? 1 : dayW >= 30 ? 2 : dayW >= 12 ? 7 : 14;
       const d = new Date(dataset.start);
       for (let i = 0; d.getTime() < dataset.end; i += 1) {
         const dow = d.getDay();
-        const labelled = every === 1 || (every === 7 ? dow === 1 : dow === 1 && i % 14 < 7);
+        const labelled =
+          every === 1 ||
+          (every === 2 ? i % 2 === 0 : every === 7 ? dow === 1 : dow === 1 && i % 14 < 7);
         out.push({
           x: xOf(d.getTime()),
           label: labelled && xOf(d.getTime()) < width - 44 ? fmtShort(d.getTime()) : "",
@@ -129,6 +131,11 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
     >
       <svg width={width} height={HEIGHT} role="img" aria-label="Messages per hour">
         <defs>
+          <linearGradient id="played-grad" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#3f71fa" />
+            <stop offset="0.6" stopColor="#4d8afc" />
+            <stop offset="1" stopColor="#70d8fa" />
+          </linearGradient>
           <clipPath id="played">
             <rect x={0} y={0} width={Math.max(0, playX)} height={HEIGHT} />
           </clipPath>
@@ -187,7 +194,14 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
             >
               <title>{`Jump to ${text} messages in 3 hours`}</title>
               <line x1={x} x2={x} y1={14} y2={BAR_TOP + BAR_H} />
-              <circle cx={x} cy={12} r={3.5} />
+              <rect
+                className="diamond"
+                x={x - 3.5}
+                y={8.5}
+                width={7}
+                height={7}
+                transform={`rotate(45 ${x} 12)`}
+              />
               {showText ? (
                 <text x={x + 8} y={15}>
                   {text}

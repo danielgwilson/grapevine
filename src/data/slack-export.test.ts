@@ -145,6 +145,26 @@ describe("parseSlackExport", () => {
     expect(() => parseSlackExport(files, "x")).toThrow("users.json in this export is not a list.");
   });
 
+  it("carries profile photo URLs through", () => {
+    const files = fixture();
+    files.set(
+      "users.json",
+      JSON.stringify([
+        {
+          id: "U1",
+          name: "ana",
+          profile: { real_name: "Ana Lima", image_72: "a72.png", image_192: "a192.png" },
+        },
+        { id: "U2", name: "bo", profile: { real_name: "Bo Chen", image_72: "b72.png" } },
+      ]),
+    );
+    const ds = parseSlackExport(files, "test");
+    expect(Object.fromEntries(ds.people.map((p) => [p.id, p.avatar]))).toEqual({
+      U1: "a192.png",
+      U2: "b72.png",
+    });
+  });
+
   it("handles exports re-zipped inside a folder", () => {
     expect(parseSlackExport(fixture("My Workspace Export/"), "x").messages).toHaveLength(4);
   });
@@ -171,6 +191,7 @@ describe("demo workspace", () => {
     const ds = loadDemoDataset({ start });
     expect(ds.source).toBe("demo");
     expect(ds.people.length).toBe(32);
+    expect(ds.people.every((p) => /^avatars\/[a-z-]+\.webp$/.test(p.avatar ?? ""))).toBe(true);
     expect(ds.channels.length).toBe(15);
     expect(ds.messages.length).toBeGreaterThan(5000);
     expect(

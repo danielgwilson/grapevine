@@ -1,10 +1,10 @@
-# murmuration
+# grapevine
 
-Replay a Slack workspace as a living graph. People are dots, channels are rings, and every message flies from the person who sent it to the channel it landed in. @mentions arc between people in amber. Things that go quiet shrink and fade, so the picture always shows who is active *right now* in the replay.
+Replay a Slack workspace as a living graph. People are faces, channels are rings, and every message flies from the person who sent it to the channel it landed in. @mentions arc between people in amber. Things that go quiet shrink and fade, so the picture always shows who is active *right now* in the replay.
 
-![murmuration replaying a fictional company during an incident](docs/murmuration.jpg)
+![grapevine replaying a fictional company during an incident](docs/grapevine.jpg)
 
-It opens on a demo: a month at **Halcyon Kite Works**, a made-up company with 32 people, 15 channels and about 7,000 messages. Every name and message in the demo is invented. You can drop in your own Slack export instead. It is read inside your browser tab and never uploaded anywhere.
+It opens on a demo: a month at **Halcyon Kite Works**, a made-up company with 32 people, 15 channels and about 7,000 messages. Every name and message in the demo is invented, and the portraits are AI-generated (Grok Imagine 2, via [Luxin](https://luxin.sh)). None of them is a real person. You can drop in your own Slack export instead. It is read inside your browser tab and never uploaded anywhere.
 
 ## Run it
 
@@ -35,7 +35,7 @@ Other scripts: `pnpm test` (Vitest), `pnpm typecheck`, `pnpm lint` (Biome).
 1. A workspace admin exports data at **Workspace settings → Import/Export Data → Export**. You get a `.zip`.
 2. Click **Open Slack export** or drag the zip onto the page.
 
-The zip is unpacked and parsed in the browser with [fflate](https://github.com/101arrowz/fflate). Nothing leaves the tab. The app reads public and private channels, group DMs and DMs (whichever the export contains). It also keeps guests from shared channels who are missing from `users.json`, and it skips bots, joins and leaves.
+The zip is unpacked and parsed in the browser with [fflate](https://github.com/101arrowz/fflate). The export itself never leaves the tab. The one network request is for profile photos: the export lists each person's photo as a link to Slack's image server, and the browser loads those links the same way Slack does. The app reads public and private channels, group DMs and DMs (whichever the export contains). It also keeps guests from shared channels who are missing from `users.json`, and it skips bots, joins and leaves.
 
 `.gitignore` blocks `*.zip`, so an export dropped into the repo folder does not get committed by accident.
 
@@ -82,6 +82,9 @@ src/
   render/    canvas renderer
   ui/        React components
   App.tsx    shell, keyboard, drag and drop
+public/
+  avatars/   AI-generated portraits of the fictional demo people
+  favicon.svg
 ```
 
 ## License
