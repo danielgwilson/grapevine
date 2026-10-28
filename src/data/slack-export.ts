@@ -48,16 +48,18 @@ const SKIP_SUBTYPES = new Set([
   "tombstone",
 ]);
 
-const DAY = 86_400_000;
-
-const parseJson = <T>(files: ExportFiles, path: string, fallback: T): T => {
+/** Read a top-level list file such as users.json. Missing means empty. */
+const parseList = <T>(files: ExportFiles, path: string): T[] => {
   const raw = files.get(path);
-  if (raw === undefined) return fallback;
+  if (raw === undefined) return [];
+  let value: unknown;
   try {
-    return JSON.parse(raw) as T;
+    value = JSON.parse(raw);
   } catch {
-    throw new Error(`Could not parse ${path} as JSON.`);
+    throw new Error(`${path} in this export is not valid JSON.`);
   }
+  if (!Array.isArray(value)) throw new Error(`${path} in this export is not a list.`);
+  return value.filter((v): v is T => typeof v === "object" && v !== null && "id" in v);
 };
 
 /** Strip a single shared top-level folder if every path has one. */
@@ -120,7 +122,7 @@ export const parseSlackExport = (input: ExportFiles, label: string): Dataset => 
     throw new Error("This does not look like a Slack export: users.json is missing.");
   }
 
-  const rawUsers = parseJson<RawUser[]>(files, "users.json", []);
+  const rawUsers = parseList<RawUser>(files, "users.json");
   const people = rawUsers.filter((u) => !u.is_bot && u.id !== "USLACKBOT").map(personFrom);
   const botIds = new Set(rawUsers.filter((u) => u.is_bot).map((u) => u.id));
   const peopleById = new Map(people.map((p) => [p.id, p]));
@@ -128,7 +130,7 @@ export const parseSlackExport = (input: ExportFiles, label: string): Dataset => 
   // Each source maps a folder name in the export to a channel.
   const folders = new Map<string, Channel>();
   const addChannels = (file: string, kind: ChannelKind, folderKey: "name" | "id") => {
-    for (const c of parseJson<RawChannel[]>(files, file, [])) {
+    for (const c of parseList<RawChannel>(files, file)) {
       let name: string;
       if (kind === "dm") {
         const others = (c.members ?? []).map((m) => peopleById.get(m)?.name ?? "someone");
@@ -148,44 +150,58 @@ export const parseSlackExport = (input: ExportFiles, label: string): Dataset => 
   addChannels("dms.json", "dm", "id");
 
   const channelsById = new Map([...folders.values()].map((c) => [c.id, c]));
-  const messages: Message[] = [];
 
+  // Pass 1: read every message file and register people missing from users.json
+  // (Slack Connect guests, deleted accounts), so mentions of them resolve no
+  // matter which file is read first.
+  const batches: Array<{ channel: Channel; entries: RawMessage[] }> = [];
+  const isHuman = (m: RawMessage): m is RawMessage & { user: string } =>
+    Boolean(m) &&
+    (!m.type || m.type === "message") &&
+    !(m.subtype && SKIP_SUBTYPES.has(m.subtype)) &&
+    Boolean(m.user) &&
+    !m.bot_id &&
+    m.user !== "USLACKBOT" &&
+    !botIds.has(m.user ?? "");
   for (const [path, text] of files) {
     const slash = path.lastIndexOf("/");
     if (slash < 0 || !path.endsWith(".json")) continue;
     const channel = folders.get(path.slice(0, slash));
     if (!channel) continue;
-
-    let entries: RawMessage[];
+    let entries: unknown;
     try {
-      entries = JSON.parse(text) as RawMessage[];
+      entries = JSON.parse(text);
     } catch {
       continue;
     }
     if (!Array.isArray(entries)) continue;
+    const human = (entries as RawMessage[]).filter(isHuman);
+    for (const m of human) {
+      if (peopleById.has(m.user)) continue;
+      const guest = personFrom({
+        id: m.user,
+        name: m.user_profile?.name ?? `guest-${m.user.slice(-4).toLowerCase()}`,
+        profile: m.user_profile,
+      });
+      people.push(guest);
+      peopleById.set(guest.id, guest);
+    }
+    batches.push({ channel, entries: human });
+  }
 
+  // Pass 2: build messages.
+  const messages: Message[] = [];
+  for (const { channel, entries } of batches) {
     for (const m of entries) {
-      if (!m || (m.type && m.type !== "message")) continue;
-      if (m.subtype && SKIP_SUBTYPES.has(m.subtype)) continue;
-      if (!m.user || m.bot_id || m.user === "USLACKBOT" || botIds.has(m.user)) continue;
-      if (!peopleById.has(m.user)) {
-        // Someone outside users.json: keep them, named from the message if possible.
-        const guest = personFrom({
-          id: m.user,
-          name: m.user_profile?.name ?? `guest-${m.user.slice(-4).toLowerCase()}`,
-          profile: m.user_profile,
-        });
-        people.push(guest);
-        peopleById.set(guest.id, guest);
-      }
+      const user = m.user as string;
       const t = Math.round(Number.parseFloat(m.ts ?? "") * 1000);
       if (!Number.isFinite(t)) continue;
-      const raw = m.text ?? "";
+      const raw = typeof m.text === "string" ? m.text : "";
       messages.push({
         t,
-        user: m.user,
+        user,
         channel: channel.id,
-        mentions: extractMentions(raw).filter((id) => id !== m.user && peopleById.has(id)),
+        mentions: extractMentions(raw).filter((id) => id !== user && peopleById.has(id)),
         text: renderPreview(raw, peopleById, channelsById),
       });
     }
@@ -211,6 +227,8 @@ export const parseSlackExport = (input: ExportFiles, label: string): Dataset => 
   start.setHours(0, 0, 0, 0);
   const end = new Date(last);
   end.setHours(0, 0, 0, 0);
+  // Next local midnight; setDate (not +24h) so a 25-hour DST day is covered.
+  end.setDate(end.getDate() + 1);
 
   return {
     label,
@@ -219,6 +237,6 @@ export const parseSlackExport = (input: ExportFiles, label: string): Dataset => 
     channels: [...channelsById.values()].filter((c) => activeChannels.has(c.id)),
     messages,
     start: start.getTime(),
-    end: end.getTime() + DAY,
+    end: end.getTime(),
   };
 };

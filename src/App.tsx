@@ -154,6 +154,11 @@ export function App() {
             messages
           </p>
         </header>
+        {snap.pulse.sent === 0 ? (
+          <p className="empty">
+            Nobody has said anything yet. Press <kbd>space</kbd> to play.
+          </p>
+        ) : null}
         <ul className="legend" aria-label="Legend">
           <li>
             <span className="key-dot" /> person

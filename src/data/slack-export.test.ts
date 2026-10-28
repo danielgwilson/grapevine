@@ -103,6 +103,48 @@ describe("parseSlackExport", () => {
     expect(ds.messages.some((m) => m.user === "B1")).toBe(false);
   });
 
+  it("resolves mentions of guests even when the mention is read first", () => {
+    const files = fixture();
+    files.set(
+      "general/2025-01-01.json",
+      JSON.stringify([{ type: "message", user: "U1", text: "hi <@UGUEST>", ts: "1735725000.0" }]),
+    );
+    files.set(
+      "general/2025-01-05.json",
+      JSON.stringify([
+        {
+          type: "message",
+          user: "UGUEST",
+          text: "hello",
+          ts: "1736071200.0",
+          user_profile: { real_name: "Remy Partner" },
+        },
+      ]),
+    );
+    const ds = parseSlackExport(files, "test");
+    const mention = ds.messages.find((m) => m.text.startsWith("hi @"));
+    expect(mention?.mentions).toEqual(["UGUEST"]);
+    expect(mention?.text).toBe("hi @Remy");
+  });
+
+  it("covers the whole last day, even a 25-hour daylight-saving day", () => {
+    const files = fixture();
+    const late = new Date(2025, 10, 2, 23, 30).getTime();
+    files.set(
+      "general/2025-11-02.json",
+      JSON.stringify([{ type: "message", user: "U1", text: "late", ts: String(late / 1000) }]),
+    );
+    const ds = parseSlackExport(files, "test");
+    expect(ds.end).toBeGreaterThan(late);
+    expect(new Date(ds.end).getHours()).toBe(0);
+  });
+
+  it("explains malformed list files in plain words", () => {
+    const files = fixture();
+    files.set("users.json", JSON.stringify({ not: "a list" }));
+    expect(() => parseSlackExport(files, "x")).toThrow("users.json in this export is not a list.");
+  });
+
   it("handles exports re-zipped inside a folder", () => {
     expect(parseSlackExport(fixture("My Workspace Export/"), "x").messages).toHaveLength(4);
   });

@@ -13,6 +13,20 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const scrubbing = useRef(false);
+  // Coalesce drag seeks to one per animation frame.
+  const pending = useRef<number | null>(null);
+  const scheduleSeek = (time: number) => {
+    const first = pending.current === null;
+    pending.current = time;
+    if (!first) return;
+    requestAnimationFrame(() => {
+      if (pending.current !== null) player.seek(pending.current);
+      pending.current = null;
+    });
+  };
+  const endScrub = () => {
+    scrubbing.current = false;
+  };
   const { dataset, hist, moments } = player;
   const span = dataset.end - dataset.start;
 
@@ -106,11 +120,12 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
         player.seek(timeAt(e.clientX));
       }}
       onPointerMove={(e) => {
-        if (scrubbing.current) player.seek(timeAt(e.clientX));
+        if (scrubbing.current && e.buttons !== 0) scheduleSeek(timeAt(e.clientX));
+        else scrubbing.current = false;
       }}
-      onPointerUp={() => {
-        scrubbing.current = false;
-      }}
+      onPointerUp={endScrub}
+      onPointerCancel={endScrub}
+      onLostPointerCapture={endScrub}
     >
       <svg width={width} height={HEIGHT} role="img" aria-label="Messages per hour">
         <defs>

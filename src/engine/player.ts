@@ -131,9 +131,10 @@ export class Player {
     // Short forward hops (arrow keys) still animate; rewinds and long jumps do not.
     const animate = hop > 0 && hop <= 2 * HOUR;
     const now = performance.now();
-    const applied = this.replay.seek(t, animate ? now : 0);
+    const applied = this.replay.seek(t, animate ? now : Number.NEGATIVE_INFINITY);
     if (animate) this.launch(applied, now);
     else this.flights = [];
+    this.dropUnbornFocus();
     this.layout.sync(this.replay);
     this.emit();
   }
@@ -147,6 +148,7 @@ export class Player {
   setMemory(i: number) {
     this.memory = i;
     this.replay.setHalfLife(MEMORY[i].halfLife);
+    this.dropUnbornFocus();
     this.layout.sync(this.replay);
     this.emit();
   }
@@ -164,6 +166,16 @@ export class Player {
     this.pinned = key === this.pinned ? undefined : key;
     this.emit();
   }
+
+  /** After a rewind, forget focus on nodes that have not appeared yet. */
+  private dropUnbornFocus() {
+    const unborn = (key?: string) =>
+      key !== undefined &&
+      (this.replay.nodes.get(key)?.bornAt ?? Number.POSITIVE_INFINITY) > this.replay.t;
+    if (unborn(this.pinned)) this.pinned = undefined;
+    if (unborn(this.hovered)) this.hovered = undefined;
+  }
+
   get focusKey() {
     return this.pinned ?? this.hovered;
   }

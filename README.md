@@ -58,7 +58,7 @@ data/demo.ts writes a fake export ──┘                         │
 
 A few decisions that make it feel right:
 
-- **Time is the source of truth.** All state is a pure function of (dataset, t, half-life). Scrubbing backwards replays from the start, which takes about 20 ms on a 6-month, 38,000-message export. Rewinding cannot drift out of sync.
+- **Time is the source of truth.** All state is a pure function of (dataset, t, half-life). Scrubbing backwards replays from the start, which takes about 10 ms on a 6-month, 38,000-message export. Rewinding cannot drift out of sync.
 - **Decay instead of totals.** Each node and edge stores `(value, lastUpdated)` and decays lazily: `value × 2^(−Δt / halfLife)`. Size means momentum, not seniority.
 - **Nodes are born, not loaded.** People and channels join the simulation the first time they speak, next to whatever they first connected to. The graph grows instead of popping in all at once.
 - **The force sim is passive.** d3-force runs with its timer stopped and is ticked once per frame. Collision radii are refreshed as nodes grow, because d3 caches them otherwise.

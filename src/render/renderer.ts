@@ -122,7 +122,8 @@ export class Renderer {
       n.r = n.r === undefined ? target : n.r + (target - n.r) * 0.14;
     }
 
-    const focusKey = player.focusKey;
+    const focusNode = player.focusKey ? replay.nodes.get(player.focusKey) : undefined;
+    const focusKey = focusNode && focusNode.bornAt <= replay.t ? focusNode.key : undefined;
     let near: Set<string> | undefined;
     if (focusKey) {
       near = new Set([focusKey]);
