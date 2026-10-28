@@ -66,17 +66,27 @@ export function GraphCanvas({ player }: { player: Player }) {
     canvas.addEventListener("click", onClick);
 
     let raf = 0;
+    let last = 0;
     const loop = (now: number) => {
+      const dt = last ? Math.min(64, now - last) : 16;
+      last = now;
       player.frame(now);
       if (player.follow) {
-        const target = renderer.fit(view);
+        // Fly to the pinned node's neighborhood, or drift to frame everything.
+        const target =
+          (player.pinned && renderer.fitFocus(view, player.pinned)) || renderer.fit(view);
         if (target) {
-          const ease = 0.045;
-          setView(
-            view.k + (target.k - view.k) * ease,
-            view.x + (target.x - view.x) * ease,
-            view.y + (target.y - view.y) * ease,
-          );
+          const ease = 1 - Math.exp(-dt / (player.pinned ? 240 : 520));
+          // Interpolate the world-space center and log(zoom), so zooms feel even
+          // and the camera never swings wide on the way in.
+          const cx = (view.width / 2 - view.x) / view.k;
+          const cy = (view.height / 2 - view.y) / view.k;
+          const tx = (view.width / 2 - target.x) / target.k;
+          const ty = (view.height / 2 - target.y) / target.k;
+          const k = Math.exp(Math.log(view.k) + (Math.log(target.k) - Math.log(view.k)) * ease);
+          const nx = cx + (tx - cx) * ease;
+          const ny = cy + (ty - cy) * ease;
+          setView(k, view.width / 2 - nx * k, view.height / 2 - ny * k);
         }
       }
       renderer.draw(ctx, view, now);

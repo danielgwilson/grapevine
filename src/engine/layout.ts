@@ -49,7 +49,7 @@ export class Layout {
       .force("charge", this.charge)
       .force("collide", this.collide)
       .force("x", forceX<GraphNode>(0).strength(0.008))
-      .force("y", forceY<GraphNode>(0).strength(0.085));
+      .force("y", forceY<GraphNode>(0).strength(0.12));
   }
 
   private random() {

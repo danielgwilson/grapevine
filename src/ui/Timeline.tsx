@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Player } from "../engine/player";
 import { DAY, HOUR } from "../engine/replay";
-import { fmtCount, fmtMonth, fmtShort } from "./format";
+import { fmtCount, fmtDay, fmtMonth, fmtShort, fmtTime } from "./format";
 
 const BAR_TOP = 26;
 const BAR_H = 54;
@@ -13,6 +13,7 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const scrubbing = useRef(false);
+  const [hoverX, setHoverX] = useState<number | null>(null);
   // Coalesce drag seeks to one per animation frame.
   const pending = useRef<number | null>(null);
   const scheduleSeek = (time: number) => {
@@ -122,36 +123,22 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
         player.seek(timeAt(e.clientX));
       }}
       onPointerMove={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        setHoverX(e.clientX - rect.left);
         if (scrubbing.current && e.buttons !== 0) scheduleSeek(timeAt(e.clientX));
         else scrubbing.current = false;
       }}
+      onPointerLeave={() => setHoverX(null)}
       onPointerUp={endScrub}
       onPointerCancel={endScrub}
       onLostPointerCapture={endScrub}
     >
       <svg width={width} height={HEIGHT} role="img" aria-label="Messages per hour">
         <defs>
-          <linearGradient id="played-grad" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stopColor="#3f71fa" />
-            <stop offset="0.6" stopColor="#4d8afc" />
-            <stop offset="1" stopColor="#70d8fa" />
-          </linearGradient>
           <clipPath id="played">
             <rect x={0} y={0} width={Math.max(0, playX)} height={HEIGHT} />
           </clipPath>
         </defs>
-        {ticks.map((tick) =>
-          tick.weekend ? (
-            <rect
-              key={`w${tick.x}`}
-              x={tick.x}
-              y={BAR_TOP}
-              width={tick.dayW}
-              height={BAR_H}
-              className="weekend"
-            />
-          ) : null,
-        )}
         <path d={bars} className="bars" />
         <path d={bars} className="bars played" clipPath="url(#played)" />
         <line
@@ -181,7 +168,10 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
           const x = momentXs[i];
           const text = `${m.label} · ${fmtCount(m.count)}`;
           const next = momentXs[i + 1] ?? width + 400;
-          const showText = next - x > text.length * 6.6 + 18 && x + text.length * 6.6 + 10 < width;
+          const textW = text.length * 6.6;
+          const showText = next - x > textW + 18 && x + textW + 10 < width;
+          // Crowded markers keep quiet and reveal their label on hover.
+          const peekLeft = x + textW + 10 > width;
           return (
             <g
               key={m.t}
@@ -196,17 +186,20 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
               <line x1={x} x2={x} y1={14} y2={BAR_TOP + BAR_H} />
               <rect
                 className="diamond"
-                x={x - 3.5}
-                y={8.5}
-                width={7}
-                height={7}
+                x={x - (showText ? 3.5 : 2.5)}
+                y={12 - (showText ? 3.5 : 2.5)}
+                width={showText ? 7 : 5}
+                height={showText ? 7 : 5}
                 transform={`rotate(45 ${x} 12)`}
               />
-              {showText ? (
-                <text x={x + 8} y={15}>
-                  {text}
-                </text>
-              ) : null}
+              <text
+                className={showText ? undefined : "peek"}
+                x={peekLeft && !showText ? x - 8 : x + 8}
+                y={15}
+                textAnchor={peekLeft && !showText ? "end" : "start"}
+              >
+                {text}
+              </text>
               <rect
                 x={x - 8}
                 y={0}
@@ -217,6 +210,27 @@ export function Timeline({ player, t }: { player: Player; t: number }) {
             </g>
           );
         })}
+        {hoverX !== null && !scrubbing.current
+          ? (() => {
+              // Scrub preview: where you would land, and how busy that hour was.
+              const ht = dataset.start + (hoverX / width) * span;
+              const bin = Math.floor((ht - hist.start) / hist.binMs);
+              const n = hist.counts[bin] ?? 0;
+              const unit = hist.binMs === HOUR ? "this hour" : "in this window";
+              const text = `${fmtDay(ht)} ${fmtTime(ht)} · ${fmtCount(n)} ${unit}`;
+              const tw = text.length * 6.9 + 18;
+              const lx = Math.min(Math.max(hoverX - tw / 2, 0), width - tw);
+              return (
+                <g className="scrub-preview" pointerEvents="none">
+                  <line x1={hoverX} x2={hoverX} y1={BAR_TOP - 2} y2={BAR_TOP + BAR_H} />
+                  <rect x={lx} y={BAR_TOP + 4} width={tw} height={17} rx={3} />
+                  <text x={lx + tw / 2} y={BAR_TOP + 16}>
+                    {text}
+                  </text>
+                </g>
+              );
+            })()
+          : null}
         <line x1={playX} x2={playX} y1={4} y2={BAR_TOP + BAR_H + 4} className="playhead" />
         <circle cx={playX} cy={BAR_TOP + BAR_H + 4} r={3} className="playhead-dot" />
       </svg>

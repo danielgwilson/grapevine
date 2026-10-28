@@ -1,5 +1,5 @@
 import type { Channel, Dataset, Message, Person } from "../data/types";
-import { colorForChannel, NEUTRAL } from "./palette";
+import { NEUTRAL, PALETTES, type Palette } from "./palette";
 
 export type NodeKind = "person" | "channel";
 
@@ -8,7 +8,10 @@ export type GraphNode = {
   id: string;
   kind: NodeKind;
   label: string;
+  /** Current palette color; see Replay.recolor. */
   color: string;
+  /** Volume rank of the node's channel (its home channel for people); -1 for DMs. */
+  hueRank: number;
   /** Messages so far (sender for people, received for channels). */
   total: number;
   /** Decayed activity, valid at actT. */
@@ -25,8 +28,17 @@ export type GraphNode = {
   vy?: number;
   fx?: number | null;
   fy?: number | null;
-  // Smoothed draw radius, owned by the renderer.
+  // Render state, owned by the renderer and eased toward targets every frame.
   r?: number;
+  /** 1 = fully emphasized, 0 = dimmed by another node's focus. */
+  emph?: number;
+  /** 0 -> 1 fade-in after birth. */
+  appear?: number;
+  /** 0 = grayscale portrait, 1 = full color (speaking or in focus). */
+  tint?: number;
+  /** Label opacity and the slot it last used (screen px below/above the node). */
+  labelA?: number;
+  labelDy?: number;
 };
 
 export type EdgeKind = "post" | "mention";
@@ -39,6 +51,8 @@ export type GraphEdge = {
   w: number;
   wT: number;
   total: number;
+  /** Eased highlight multiplier, owned by the renderer. */
+  emph?: number;
 };
 
 export type Moment = { t: number; end: number; count: number; label: string };
@@ -92,7 +106,7 @@ export class Replay {
         return kind === "public" || kind === "private";
       })
       .sort((a, b) => b[1] - a[1]);
-    const channelColor = new Map(ranked.map(([id], i) => [id, colorForChannel(i)]));
+    const channelRank = new Map(ranked.map(([id], i) => [id, i]));
 
     for (const c of dataset.channels) {
       this.nodes.set(channelKey(c.id), {
@@ -100,7 +114,8 @@ export class Replay {
         id: c.id,
         kind: "channel",
         label: c.name,
-        color: channelColor.get(c.id) ?? NEUTRAL,
+        color: NEUTRAL,
+        hueRank: channelRank.get(c.id) ?? -1,
         total: 0,
         act: 0,
         actT: dataset.start,
@@ -114,7 +129,7 @@ export class Replay {
       if (counts) {
         let best = -1;
         for (const [ch, n] of counts) {
-          if (channelColor.has(ch) && n > best) {
+          if (channelRank.has(ch) && n > best) {
             best = n;
             home = ch;
           }
@@ -126,13 +141,21 @@ export class Replay {
         id: p.id,
         kind: "person",
         label: p.name,
-        color: (home && channelColor.get(home)) || NEUTRAL,
+        color: NEUTRAL,
+        hueRank: home ? (channelRank.get(home) ?? -1) : -1,
         total: 0,
         act: 0,
         actT: dataset.start,
         bornAt: Number.POSITIVE_INFINITY,
         pulseAt: Number.NEGATIVE_INFINITY,
       });
+    }
+    this.recolor(PALETTES[0]);
+  }
+
+  recolor(palette: Palette) {
+    for (const node of this.nodes.values()) {
+      node.color = node.hueRank >= 0 ? palette.hue(node.hueRank) : NEUTRAL;
     }
   }
 
@@ -260,8 +283,11 @@ export class Replay {
     const { messages } = this.dataset;
     const lastHour = this.cursor - this.indexAt(this.t - HOUR);
     const dayStart = this.indexAt(this.t - DAY);
-    const voices = new Set<string>();
-    for (let i = dayStart; i < this.cursor; i += 1) voices.add(messages[i].user);
+    const voices = new Map<string, number>();
+    for (let i = dayStart; i < this.cursor; i += 1) {
+      voices.set(messages[i].user, (voices.get(messages[i].user) ?? 0) + 1);
+    }
+    const loudest = [...voices.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     // Busiest channel over the last three hours.
     const recentByChannel = new Map<string, number>();
     for (let i = this.indexAt(this.t - 3 * HOUR); i < this.cursor; i += 1) {
@@ -280,6 +306,7 @@ export class Replay {
     return {
       lastHour,
       voices24h: voices.size,
+      loudest,
       sent: this.cursor,
       hottest: hottest?.name,
     };

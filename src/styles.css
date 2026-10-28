@@ -97,6 +97,20 @@ kbd {
   isolation: isolate;
 }
 
+/* Vignette: edges fall off into the void so the eye settles in the middle. */
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 75% 70% at 50% 55%,
+    transparent 55%,
+    rgba(5, 7, 11, 0.55) 100%
+  );
+}
+
 /* Film grain, kept faint. */
 .stage::after {
   content: "";
@@ -152,6 +166,62 @@ kbd {
   top: 22px;
   left: 30px;
   pointer-events: none;
+}
+
+/* A soft scrim so the header reads over the graph when nodes drift under it. */
+.hud::before {
+  content: "";
+  position: absolute;
+  inset: -60px -120px -50px -60px;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse at 30% 40%,
+    rgba(5, 7, 11, 0.78) 0%,
+    rgba(5, 7, 11, 0.4) 45%,
+    transparent 72%
+  );
+}
+
+.corner {
+  position: absolute;
+  z-index: 3;
+  top: 26px;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.text-link {
+  background: none;
+  border: 0;
+  padding: 0 0 3px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    color 180ms var(--ease),
+    border-color 180ms var(--ease);
+}
+
+.text-link:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line-2);
+}
+
+.keys-hint {
+  margin: 0;
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: help;
+  white-space: nowrap;
 }
 
 .brand {
@@ -305,6 +375,10 @@ kbd {
 
 /* ---- rail ---- */
 .rail {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+  overflow-anchor: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
   grid-column: 2;
   grid-row: 1;
   min-height: 0;
@@ -494,11 +568,57 @@ kbd {
   color: var(--ink-2);
 }
 
-.hint {
+.leaders {
+  list-style: none;
   margin: 14px 0 0;
+  padding: 0;
+}
+
+.leader {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 26px 1fr 64px 28px;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.leader .av {
+  border-radius: 50%;
+  filter: grayscale(1) brightness(0.9);
+  transition: filter 220ms var(--ease);
+}
+
+.leader:hover .av {
+  filter: none;
+}
+
+.leader-name {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 180ms var(--ease);
+}
+
+.leader:hover .leader-name {
+  color: var(--ink);
+}
+
+.leader .bar-fill {
+  background: var(--ink-2);
+}
+
+.hint {
+  margin: 16px 0 0;
   font-family: var(--f-serif);
   font-style: italic;
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1.3;
   color: var(--ink-2);
 }
@@ -515,6 +635,7 @@ kbd {
 }
 
 .msg {
+  animation: rise 260ms var(--ease) both;
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
 }
@@ -619,6 +740,10 @@ kbd {
 }
 
 .segmented button {
+  transition:
+    color 180ms var(--ease),
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease);
   font-family: var(--f-mono);
   font-size: 10.5px;
   background: none;
@@ -644,6 +769,9 @@ kbd {
 }
 
 .btn {
+  transition:
+    color 180ms var(--ease),
+    border-color 180ms var(--ease);
   font-family: var(--f-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -702,15 +830,11 @@ kbd {
 }
 
 .bars {
-  fill: rgba(150, 172, 214, 0.22);
+  fill: rgba(150, 172, 214, 0.14);
 }
 
 .bars.played {
-  fill: url(#played-grad);
-}
-
-.weekend {
-  fill: rgba(150, 172, 214, 0.03);
+  fill: rgba(190, 205, 235, 0.55);
 }
 
 .baseline,
@@ -748,12 +872,57 @@ kbd {
   fill: var(--ink-2);
 }
 
+.moment text {
+  paint-order: stroke;
+  stroke: var(--field);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.moment .peek {
+  opacity: 0;
+  transition: opacity 180ms var(--ease);
+}
+
+.moment:hover .peek {
+  opacity: 1;
+}
+
 .moment .hit {
   fill: transparent;
 }
 
 .moment:hover text {
   fill: var(--ink);
+}
+
+.scrub-preview line {
+  stroke: var(--ink-2);
+  stroke-opacity: 0.45;
+}
+
+.scrub-preview rect {
+  fill: rgba(5, 7, 11, 0.88);
+  stroke: var(--line-2);
+}
+
+.scrub-preview text {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  fill: var(--ink);
+  text-anchor: middle;
+}
+
+.focus-body {
+  animation: rise 360ms var(--ease) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0.4;
+    transform: translateY(-3px);
+  }
 }
 
 .playhead {
@@ -796,7 +965,9 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage::after {
+  .stage::after,
+  .msg,
+  .focus-body {
     animation: none;
   }
 }
@@ -845,6 +1016,15 @@ kbd {
   .hud {
     left: 16px;
     top: 14px;
+  }
+
+  .source {
+    display: none;
+  }
+
+  .corner {
+    top: 16px;
+    right: 16px;
   }
 
   .clock-day {

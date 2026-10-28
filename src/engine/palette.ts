@@ -1,27 +1,66 @@
-// Light, low-saturation hues that read as light on a near-black field rather
-// than as flat fills. Ordered so the busiest channels get the most separable.
-const CHANNEL_HUES = [
-  "#70d8fa", // sky
-  "#8ea8ff", // periwinkle
-  "#9be3c6", // mint
-  "#f6a6b8", // rose
-  "#c3b5ff", // lilac
-  "#7fc8e8", // glacier
-  "#e7c9a4", // wheat
-  "#a6d7ff", // ice
-  "#b3e09a", // sage
-  "#f2b48c", // apricot
-  "#9fb4d6", // slate blue
-  "#d9a6e8", // orchid
+export type PaletteId = "moonlight" | "tide" | "spectrum";
+
+export type Palette = {
+  id: PaletteId;
+  label: string;
+  /** Color for a channel (and the people whose home it is) by volume rank. */
+  hue: (rank: number) => string;
+  /** Comet tails for ordinary messages. */
+  flight: (hue: string) => string;
+};
+
+// Moonlight: one cool silver for everything; only motion and mentions carry color.
+const SILVER = ["#d6deec", "#c3cde0", "#b2bdd3", "#a4b0c8"];
+// Tide: a narrow band of blues, light to deep.
+const TIDE = [
+  "#70d8fa",
+  "#8ea8ff",
+  "#a6d7ff",
+  "#5fb3e6",
+  "#b4c4ff",
+  "#7fc8e8",
+  "#6f93f0",
+  "#c9e6ff",
+];
+// Spectrum: light, low-saturation hues that read as light on near-black.
+const SPECTRUM = [
+  "#70d8fa",
+  "#8ea8ff",
+  "#9be3c6",
+  "#f6a6b8",
+  "#c3b5ff",
+  "#7fc8e8",
+  "#e7c9a4",
+  "#a6d7ff",
+  "#b3e09a",
+  "#f2b48c",
+  "#9fb4d6",
+  "#d9a6e8",
+];
+
+export const PALETTES: Palette[] = [
+  {
+    id: "moonlight",
+    label: "mono",
+    hue: (rank) => SILVER[rank % SILVER.length],
+    flight: () => "#9fdcff",
+  },
+  { id: "tide", label: "tide", hue: (rank) => TIDE[rank % TIDE.length], flight: (hue) => hue },
+  {
+    id: "spectrum",
+    label: "spectrum",
+    hue: (rank) => SPECTRUM[rank % SPECTRUM.length],
+    flight: (hue) => hue,
+  },
 ];
 
 export const NEUTRAL = "#8b93a7";
 export const MENTION = "#fad586"; // sand
 
-export const colorForChannel = (rank: number) => CHANNEL_HUES[rank % CHANNEL_HUES.length];
+export const paletteById = (id: PaletteId) => PALETTES.find((p) => p.id === id) ?? PALETTES[0];
 
 /** Parse #rrggbb into rgba() with alpha. */
 export const withAlpha = (hex: string, alpha: number) => {
   const n = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha.toFixed(3)})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${Math.max(0, alpha).toFixed(3)})`;
 };

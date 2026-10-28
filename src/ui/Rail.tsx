@@ -78,7 +78,7 @@ export function Rail({ player, snap }: { player: Player; snap: Snapshot }) {
 
       <section className="rail-section focus">
         <h2 className="eyebrow">
-          {focus ? (snap.pinned ? "Pinned" : "Hovering") : "Focus"}
+          {focus ? (snap.pinned ? "Pinned" : "Hovering") : "Loudest · 24h"}
           {snap.pinned ? (
             <button
               type="button"
@@ -90,7 +90,7 @@ export function Rail({ player, snap }: { player: Player; snap: Snapshot }) {
           ) : null}
         </h2>
         {focus ? (
-          <>
+          <div className="focus-body" key={focus.key}>
             <div className="focus-head">
               {focus.kind === "person" ? (
                 <Avatar player={player} id={focus.key.slice(2)} size={40} />
@@ -149,9 +149,34 @@ export function Rail({ player, snap }: { player: Player; snap: Snapshot }) {
                 ))}
               </ul>
             ) : null}
-          </>
+          </div>
         ) : (
-          <p className="hint">Hover a face or a ring to see who it is. Click to pin it.</p>
+          <div className="focus-body">
+            <ul className="leaders">
+              {pulse.loudest.map(([id, n]) => {
+                const node = player.replay.node("person", id);
+                const person = player.replay.people.get(id);
+                const max = pulse.loudest[0]?.[1] ?? 1;
+                return (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className="leader"
+                      onClick={() => node && player.pin(node.key)}
+                    >
+                      <Avatar player={player} id={id} size={26} />
+                      <span className="leader-name">{person?.fullName ?? id}</span>
+                      <span className="bar-track">
+                        <span className="bar-fill" style={{ width: `${(n / max) * 100}%` }} />
+                      </span>
+                      <span className="bar-value">{fmtCount(n)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="hint">Hover a face to light up who they talk to. Click to follow them.</p>
+          </div>
         )}
       </section>
 

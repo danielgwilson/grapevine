@@ -1,6 +1,6 @@
 import type { Dataset, Message } from "../data/types";
 import { Layout } from "./layout";
-import { MENTION } from "./palette";
+import { MENTION, PALETTES, type PaletteId, paletteById } from "./palette";
 import { DAY, findMoments, type GraphNode, HOUR, histogram, type Moment, Replay } from "./replay";
 
 export const SPEEDS = [
@@ -49,10 +49,29 @@ export type Snapshot = {
   speed: number;
   memory: number;
   follow: boolean;
+  palette: PaletteId;
   pulse: ReturnType<Replay["pulse"]>;
   feed: Message[];
   focus?: Focus;
   pinned?: string;
+};
+
+// Viewer conveniences only; the app works the same without storage.
+const SETTINGS_KEY = "grapevine.settings.v1";
+type Settings = { speed?: number; memory?: number; palette?: PaletteId };
+const loadSettings = (): Settings => {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Settings;
+  } catch {
+    return {};
+  }
+};
+const saveSettings = (s: Settings) => {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    // Private windows and blocked storage are fine.
+  }
 };
 
 const MAX_FLIGHTS = 500;
@@ -66,8 +85,10 @@ export class Player {
   readonly moments: Moment[];
 
   playing = false;
-  speed = 2;
+  speed = 1;
   memory = 1;
+  palette: PaletteId = "moonlight";
+  /** Camera follows the graph (or the pinned node) until the user pans or zooms. */
   follow = true;
   hovered?: string;
   pinned?: string;
@@ -82,7 +103,12 @@ export class Player {
 
   constructor(dataset: Dataset) {
     this.dataset = dataset;
+    const saved = loadSettings();
+    if (typeof saved.speed === "number" && SPEEDS[saved.speed]) this.speed = saved.speed;
+    if (typeof saved.memory === "number" && MEMORY[saved.memory]) this.memory = saved.memory;
+    if (saved.palette && PALETTES.some((p) => p.id === saved.palette)) this.palette = saved.palette;
     this.replay = new Replay(dataset, MEMORY[this.memory].halfLife);
+    this.replay.recolor(paletteById(this.palette));
     this.hist = histogram(dataset);
     this.moments = findMoments(dataset);
     // Open on the first weekday morning with real activity so the graph is never empty.
@@ -141,12 +167,23 @@ export class Player {
   step(ms: number) {
     this.seek(this.replay.t + ms);
   }
+  private persist() {
+    saveSettings({ speed: this.speed, memory: this.memory, palette: this.palette });
+  }
   setSpeed(i: number) {
     this.speed = Math.max(0, Math.min(SPEEDS.length - 1, i));
+    this.persist();
+    this.emit();
+  }
+  setPalette(id: PaletteId) {
+    this.palette = id;
+    this.replay.recolor(paletteById(id));
+    this.persist();
     this.emit();
   }
   setMemory(i: number) {
     this.memory = i;
+    this.persist();
     this.replay.setHalfLife(MEMORY[i].halfLife);
     this.dropUnbornFocus();
     this.layout.sync(this.replay);
@@ -162,8 +199,10 @@ export class Player {
     this.hovered = key;
     this.emit();
   }
+  /** Pin (or unpin) a node. Either way the camera resumes: to the pin, or back to everything. */
   pin(key: string | undefined) {
     this.pinned = key === this.pinned ? undefined : key;
+    this.follow = true;
     this.emit();
   }
 
@@ -222,7 +261,7 @@ export class Player {
         to,
         start: now + Math.random() * 60,
         duration,
-        color: from.color,
+        color: paletteById(this.palette).flight(from.color),
         kind: "post",
         bend: this.flip * (0.12 + Math.random() * 0.18),
       });
@@ -252,6 +291,7 @@ export class Player {
       speed: this.speed,
       memory: this.memory,
       follow: this.follow,
+      palette: this.palette,
       pulse: this.replay.pulse(),
       feed: this.replay.recent(9),
       focus: this.focusKey ? this.describe(this.focusKey) : undefined,

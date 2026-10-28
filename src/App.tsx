@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { loadDemoDataset } from "./data/demo";
 import type { Dataset } from "./data/types";
 import { readExportZip } from "./data/zip";
+import { PALETTES } from "./engine/palette";
 import { MEMORY, Player, SPEEDS } from "./engine/player";
 import { DAY, HOUR } from "./engine/replay";
 import { fmtCount, fmtDay, fmtTime } from "./ui/format";
@@ -45,6 +46,15 @@ export function App() {
   const [dataset, setDataset] = useState<Dataset>(() => loadDemoDataset());
   const player = useMemo(() => new Player(dataset), [dataset]);
   const snap = useSyncExternalStore(player.subscribe, player.getSnapshot);
+
+  // A short beat on the opening frame, then the replay starts on its own.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setTimeout(() => {
+      if (!player.playing) player.play();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [player]);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<Status>(null);
 
@@ -163,6 +173,31 @@ export function App() {
             Nobody has said anything yet. Press <kbd>space</kbd> to play.
           </p>
         ) : null}
+        <div className="corner">
+          {status ? <p className={`status ${status.kind}`}>{status.text}</p> : null}
+          {dataset.source === "import" ? (
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => setDataset(loadDemoDataset())}
+            >
+              Back to demo
+            </button>
+          ) : null}
+          <label className="text-link">
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void load(file);
+                e.target.value = "";
+              }}
+            />
+            Open your Slack export
+          </label>
+        </div>
         <ul className="legend" aria-label="Legend">
           <li>
             <span className="key-dot" /> person
@@ -189,6 +224,7 @@ export function App() {
           <button
             type="button"
             className="play"
+            title="Play or pause (space)"
             onClick={() => player.toggle()}
             aria-label={snap.playing ? "Pause" : "Play"}
           >
@@ -215,34 +251,18 @@ export function App() {
             value={snap.memory}
             onChange={(i) => player.setMemory(i)}
           />
+          <Segmented
+            label="color"
+            options={PALETTES}
+            value={PALETTES.findIndex((p) => p.id === snap.palette)}
+            onChange={(i) => player.setPalette(PALETTES[i].id)}
+          />
           <div className="spacer" />
-          {status ? <p className={`status ${status.kind}`}>{status.text}</p> : null}
-          {dataset.source === "import" ? (
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => setDataset(loadDemoDataset())}
-            >
-              Back to demo
-            </button>
-          ) : null}
-          <label className="btn">
-            <input
-              type="file"
-              accept=".zip,application/zip"
-              hidden
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void load(file);
-                e.target.value = "";
-              }}
-            />
-            Open Slack export
-          </label>
-          <p className="keys">
-            <kbd>space</kbd> play <kbd>←</kbd>
-            <kbd>→</kbd> hour <kbd>⇧</kbd> day <kbd>[</kbd>
-            <kbd>]</kbd> speed
+          <p
+            className="keys-hint"
+            title="Space: play or pause · ← →: one hour (⇧ for a day) · [ ]: speed · F: re-center · Esc: unpin"
+          >
+            <kbd>?</kbd> keys
           </p>
         </div>
         <Timeline player={player} t={snap.t} />

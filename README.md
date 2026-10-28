@@ -1,6 +1,6 @@
 # grapevine
 
-Replay a Slack workspace as a living graph. People are faces, channels are rings, and every message flies from the person who sent it to the channel it landed in. @mentions arc between people in amber. Things that go quiet shrink and fade, so the picture always shows who is active *right now* in the replay.
+Replay a Slack workspace as a living graph. People are faces, channels are rings, and every message flies from the person who sent it to the channel it landed in. @mentions arc between people in amber. Things that go quiet shrink and fade, so the picture always shows who is active *right now* in the replay. Portraits sit in grayscale and warm into color the moment that person speaks.
 
 ![grapevine replaying a fictional company during an incident](docs/grapevine.jpg)
 
@@ -25,10 +25,14 @@ Other scripts: `pnpm test` (Vitest), `pnpm typecheck`, `pnpm lint` (Biome).
 | `←` `→` | step one hour (hold `shift` for a day) |
 | `[` `]` | slower / faster (1 hour to 3 days of Slack per second) |
 | `F` | re-center the camera after you pan or zoom |
-| `esc` | clear the pinned node |
-| click | pin a person or channel to see who they talk to and what they said |
-| timeline | click or drag to scrub. Amber markers are bursts it found on its own. Click one to jump there |
+| `esc` | clear the pinned node and fly back out |
+| hover | light up a person or channel and everything it touches |
+| click | pin it: the camera flies to its neighborhood, and the side panel shows who it talks to and what was said |
+| timeline | hover to preview, click or drag to scrub. The diamonds mark bursts it found on its own; click one to jump there |
 | memory | how fast activity fades: 6h, 2d, 1w, or never (cumulative) |
+| color | mono (default), tide, or spectrum. Speed, memory and color are remembered in this browser |
+
+![Clicking a person flies the camera to them; everyone they talk to warms into color](docs/grapevine-focus.jpg)
 
 ## Use your own Slack export
 
