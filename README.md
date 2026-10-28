@@ -2,6 +2,8 @@
 
 Replay a Slack workspace as a living graph. People are faces, channels are rings, and every message flies from the person who sent it to the channel it landed in. @mentions arc between people in amber. Things that go quiet shrink and fade, so the picture always shows who is active *right now* in the replay. Portraits sit in grayscale and warm into color the moment that person speaks.
 
+**Try it: https://danielgwilson.github.io/grapevine/**
+
 ![grapevine replaying a fictional company during an incident](docs/grapevine.jpg)
 
 It opens on a demo: a month at **Halcyon Kite Works**, a made-up company with 32 people, 15 channels and about 7,000 messages. Every name and message in the demo is invented, and the portraits are AI-generated (Grok Imagine 2, via [Luxin](https://luxin.sh)). None of them is a real person. You can drop in your own Slack export instead. It is read inside your browser tab and never uploaded anywhere.
@@ -13,7 +15,7 @@ pnpm install
 pnpm dev        # http://localhost:5173
 ```
 
-`pnpm build` writes a static site to `dist/` that you can host anywhere (GitHub Pages, Netlify, an S3 bucket, or just `npx serve dist`). There is no server and no API.
+`pnpm build` writes a static site to `dist/` that you can host anywhere (GitHub Pages, Netlify, an S3 bucket, or just `npx serve dist`). There is no server and no API. This repo deploys itself to GitHub Pages on every push to `main` (`.github/workflows/pages.yml`).
 
 Other scripts: `pnpm test` (Vitest), `pnpm typecheck`, `pnpm lint` (Biome).
 
