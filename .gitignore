@@ -1,0 +1,12 @@
+node_modules
+dist
+*.tsbuildinfo
+.DS_Store
+.vite
+coverage
+
+# Never commit a real Slack export. Load it in the browser instead.
+*.zip
+/export/
+/exports/
+/teams/
